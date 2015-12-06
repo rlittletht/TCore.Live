@@ -62,6 +62,12 @@
     <Compile Include="RestHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TCore.Logging\Logging.csproj">
+      <Project>{ee681c45-8416-4de7-9e62-ae1371a7de9a}</Project>
+      <Name>Logging</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

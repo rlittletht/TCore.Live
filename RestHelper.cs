@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
+using TCore.Logging;
 
 namespace TCore.Live
 {
@@ -26,6 +29,12 @@ namespace TCore.Live
         public LiveUserInfo_Emails emails { get { return m_luie; } set { m_luie = value; } }
     }
 
+    public struct LiveUserInfo_Async
+    {
+        public LiveUserInfo lui;
+        public string sReason;
+    }
+
     public class LiveUserInfo_Emails
     {
         private string m_sPreferred;
@@ -39,15 +48,17 @@ namespace TCore.Live
     {
         public static LiveUserInfo GetUserInfoFromAccessTokenSync(string sAccessToken)
         {
-            Task<LiveUserInfo> tlui = GetUserInfoFromAccessToken(sAccessToken);
-            tlui.Wait();
+            Task<LiveUserInfo_Async> tluia = GetUserInfoFromAccessToken(sAccessToken);
+            tluia.Wait();
 
-            return tlui.Result;
+            return tluia.Result.lui;
         }
 
-        public static async Task<LiveUserInfo> GetUserInfoFromAccessToken(string sAccessToken)
+        public static async Task<LiveUserInfo_Async> GetUserInfoFromAccessToken(string sAccessToken, LogProvider lp = null, CorrelationID crid = null)
         {
             LiveUserInfo lui = null;
+            LiveUserInfo_Async luia;
+
 #if DEBUG
             if (sAccessToken.StartsWith("#666#"))
                 {
@@ -75,30 +86,50 @@ namespace TCore.Live
                 return lui;
                 }
 #endif // DEBUG
-            HttpClient client = new HttpClient();
-            client.BaseAddress = new Uri("https://apis.live.net/v5.0/me");
+            lp?.LogEvent(crid, EventType.Verbose, "GetUserInfoFromAccessToken enter");
 
-            // Add an Accept header for JSON format.
-            client.DefaultRequestHeaders.Accept.Add(
-                                                    new MediaTypeWithQualityHeaderValue("application/json"));
+            int cTryLeft = 2;
+            luia.lui = null;
+            luia.sReason = null;
 
-            // List data response.
-            HttpResponseMessage response = client.GetAsync(String.Format("?access_token={0}", sAccessToken)).Result;
+            while (cTryLeft > 0)
+                {
+                HttpClient client = new HttpClient();
+
+                client.BaseAddress = new Uri("https://apis.live.net/v5.0/me");
+
+                // Add an Accept header for JSON format.
+                client.DefaultRequestHeaders.Accept.Add(
+                    new MediaTypeWithQualityHeaderValue("application/json"));
+
+                // List data response.
+                HttpResponseMessage response = client.GetAsync(String.Format("?access_token={0}", sAccessToken)).Result;
                 // Blocking call!
-            if (response.IsSuccessStatusCode)
-                {
-                // Parse the response body. Blocking!
-                string s = await response.Content.ReadAsStringAsync();
-                JavaScriptSerializer jscript = new JavaScriptSerializer();
-                lui = jscript.Deserialize<LiveUserInfo>(s);
-                }
-            else
-                {
-                lui = null;
-                Console.WriteLine("{0} ({1})", (int) response.StatusCode, response.ReasonPhrase);
-                }
+                if (response.IsSuccessStatusCode)
+                    {
+                    // Parse the response body. Blocking!
+                    string s = await response.Content.ReadAsStringAsync();
+                    JavaScriptSerializer jscript = new JavaScriptSerializer();
+                    lui = jscript.Deserialize<LiveUserInfo>(s);
+                    luia.lui = lui;
+                    luia.sReason = null;
+                    lp?.LogEvent(crid, EventType.Verbose, "GetUserInfoFromAccessToken success");
+                    return luia;
+                    }
+                else
+                    {
+                    lp?.LogEvent(crid, EventType.Error, "GetUserInfoFromAccessToken failed: {0}: {1}", response.StatusCode, response.ReasonPhrase);
+                    luia.lui = null;
+                    luia.sReason = String.Format("{0} ({1})", (int) response.StatusCode, response.ReasonPhrase);
+                    // Console.WriteLine("{0} ({1})", (int) response.StatusCode, response.ReasonPhrase);
+                    }
+                cTryLeft--;
 
-            return lui;
+                if (cTryLeft > 0)
+                    lp?.LogEvent(crid, EventType.Information, "GetUserInfoFromAccessToken RETRY {0}", cTryLeft);
+
+                }
+            return luia;
         }
 
     }
