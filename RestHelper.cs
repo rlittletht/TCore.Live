@@ -83,7 +83,9 @@ namespace TCore.Live
 
                 lui.name = sAccessToken.Substring(ich, ichNext - ich);
 
-                return lui;
+                luia.lui = lui;
+                luia.sReason = null;
+                return luia;
                 }
 #endif // DEBUG
             lp?.LogEvent(crid, EventType.Verbose, "GetUserInfoFromAccessToken enter");
